@@ -1,0 +1,42 @@
+# Use Python 3.10 slim image
+FROM python:3.10-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (including ODBC drivers for SQL Server)
+RUN apt-get update && apt-get install -y \
+    unixodbc \
+    curl \
+    gcc \
+    python3-dev \
+    unixodbc-dev \
+    gnupg2 \
+    && curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
+    && curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql17 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - \
+    && ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+
+# Copy only requirements
+COPY pyproject.toml poetry.lock* ./
+
+# Configure Poetry to NOT create a virtual environment
+RUN poetry config virtualenvs.create false
+
+# Install dependencies including uvicorn explicitly
+RUN poetry install --no-root --no-interaction --no-ansi \
+    && pip install uvicorn
+
+# Copy application code
+COPY ./files_service ./files_service
+
+# Expose port
+EXPOSE 8000
+
+# Run the application directly with uvicorn
+CMD ["uvicorn", "files_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
